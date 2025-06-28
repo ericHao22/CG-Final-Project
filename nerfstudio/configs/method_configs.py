@@ -37,6 +37,7 @@ from nerfstudio.data.dataparsers.nerfstudio_dataparser import NerfstudioDataPars
 from nerfstudio.data.dataparsers.phototourism_dataparser import PhototourismDataParserConfig
 from nerfstudio.data.dataparsers.sdfstudio_dataparser import SDFStudioDataParserConfig
 from nerfstudio.data.dataparsers.sitcoms3d_dataparser import Sitcoms3DDataParserConfig
+from nerfstudio.data.dataparsers.splatfacto_dataparser import SplatfactoDataParserConfig
 from nerfstudio.data.datasets.depth_dataset import DepthDataset
 from nerfstudio.data.datasets.sdf_dataset import SDFDataset
 from nerfstudio.data.datasets.semantic_dataset import SemanticDataset
@@ -600,7 +601,7 @@ method_configs["splatfacto"] = TrainerConfig(
     gradient_accumulation_steps={"camera_opt": 100},
     pipeline=VanillaPipelineConfig(
         datamanager=FullImageDatamanagerConfig(
-            dataparser=NerfstudioDataParserConfig(load_3D_points=True),
+            dataparser=SplatfactoDataParserConfig(),
             cache_images_type="uint8",
         ),
         model=SplatfactoModelConfig(),
@@ -662,7 +663,7 @@ method_configs["splatfacto-big"] = TrainerConfig(
     gradient_accumulation_steps={"camera_opt": 100},
     pipeline=VanillaPipelineConfig(
         datamanager=FullImageDatamanagerConfig(
-            dataparser=NerfstudioDataParserConfig(load_3D_points=True),
+            dataparser=SplatfactoDataParserConfig(),
             cache_images_type="uint8",
         ),
         model=SplatfactoModelConfig(
@@ -727,7 +728,7 @@ method_configs["splatfacto-mcmc"] = TrainerConfig(
     gradient_accumulation_steps={"camera_opt": 100},
     pipeline=VanillaPipelineConfig(
         datamanager=FullImageDatamanagerConfig(
-            dataparser=NerfstudioDataParserConfig(load_3D_points=True),
+            dataparser=SplatfactoDataParserConfig(),
             cache_images_type="uint8",
         ),
         model=SplatfactoModelConfig(
