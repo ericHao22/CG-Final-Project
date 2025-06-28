@@ -44,7 +44,7 @@ from nerfstudio.utils.math import k_nearest_sklearn, random_quat_tensor
 from nerfstudio.utils.misc import torch_compile
 from nerfstudio.utils.rich_utils import CONSOLE
 from nerfstudio.utils.spherical_harmonics import RGB2SH, SH2RGB, num_sh_bases
-
+from nerfstudio.utils.gs4d import slice_4d
 
 def resize_image(image: torch.Tensor, d: int):
     """
@@ -188,6 +188,7 @@ class SplatfactoModel(Model):
 
     def populate_modules(self):
         if self.seed_points is not None and not self.config.random_init:
+            CONSOLE.log("Using seed points for initialization")
             means = torch.nn.Parameter(self.seed_points[0])  # (Location, Color)
         else:
             means = torch.nn.Parameter((torch.rand((self.config.num_random, 3)) - 0.5) * self.config.random_scale)
@@ -504,6 +505,16 @@ class SplatfactoModel(Model):
         )
         return out["rgb"]
 
+    def slice_4d_to_3d(self, t_current):
+        xyzt = torch.cat([self.means, self.t], dim=-1)  # (N, 4)
+        scale = torch.exp(self.scales4d) # (N, 4)
+        r1, r2 = self.quats, self.quats2
+        conv3, speed, w = slice_4d(scale, r1, r2)
+        deltat = t_current - xyzt[:, 3:4]
+        mean3d = xyzt[:, :3] + speed * deltat
+        
+        return mean3d, conv3, speed, w 
+
     def get_outputs(self, camera: Cameras) -> Dict[str, Union[torch.Tensor, List]]:
         """Takes in a camera and returns a dictionary of outputs.
 
@@ -523,10 +534,15 @@ class SplatfactoModel(Model):
             optimized_camera_to_world = self.camera_optimizer.apply_to_camera(camera)
         else:
             optimized_camera_to_world = camera.camera_to_worlds
+        
+        time = camera.times[0][0]
+        means3d, _, _, _ = self.slice_4d_to_3d(time)
+        scales3d = self.scales
+        quats3d = self.quats
 
         # cropping
         if self.crop_box is not None and not self.training:
-            crop_ids = self.crop_box.within(self.means).squeeze()
+            crop_ids = self.crop_box.within(means3d).squeeze()
             if crop_ids.sum() == 0:
                 return self.get_empty_outputs(
                     int(camera.width.item()), int(camera.height.item()), self.background_color
@@ -536,18 +552,18 @@ class SplatfactoModel(Model):
 
         if crop_ids is not None:
             opacities_crop = self.opacities[crop_ids]
-            means_crop = self.means[crop_ids]
+            means_crop = means3d[crop_ids]
             features_dc_crop = self.features_dc[crop_ids]
             features_rest_crop = self.features_rest[crop_ids]
-            scales_crop = self.scales[crop_ids]
-            quats_crop = self.quats[crop_ids]
+            scales_crop = scales3d[crop_ids]
+            quats_crop = quats3d[crop_ids]
         else:
             opacities_crop = self.opacities
-            means_crop = self.means
+            means_crop = means3d
             features_dc_crop = self.features_dc
             features_rest_crop = self.features_rest
-            scales_crop = self.scales
-            quats_crop = self.quats
+            scales_crop = scales3d
+            quats_crop = quats3d
 
         colors_crop = torch.cat((features_dc_crop[:, None, :], features_rest_crop), dim=1)
 
