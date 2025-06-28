@@ -191,12 +191,15 @@ class SplatfactoModel(Model):
             means = torch.nn.Parameter(self.seed_points[0])  # (Location, Color)
         else:
             means = torch.nn.Parameter((torch.rand((self.config.num_random, 3)) - 0.5) * self.config.random_scale)
+        t =  torch.nn.Parameter(torch.rand_like(means[:, :1]))
         distances, _ = k_nearest_sklearn(means.data, 3)
         # find the average of the three nearest neighbors for each point and use that as the scale
         avg_dist = distances.mean(dim=-1, keepdim=True)
         scales = torch.nn.Parameter(torch.log(avg_dist.repeat(1, 3)))
+        scales_t = torch.nn.Parameter(torch.log(torch.sqrt(torch.ones_like(scales[:, :1]) * 0.2 * 10)))
         num_points = means.shape[0]
         quats = torch.nn.Parameter(random_quat_tensor(num_points))
+        quats2 = torch.zeros_like(quats)
         dim_sh = num_sh_bases(self.config.sh_degree)
 
         if (
@@ -222,8 +225,11 @@ class SplatfactoModel(Model):
         self.gauss_params = torch.nn.ParameterDict(
             {
                 "means": means,
+                "t": t,
                 "scales": scales,
+                "scales_t": scales_t,
                 "quats": quats,
+                "quats2": quats2,
                 "features_dc": features_dc,
                 "features_rest": features_rest,
                 "opacities": opacities,
@@ -319,14 +325,30 @@ class SplatfactoModel(Model):
     @property
     def means(self):
         return self.gauss_params["means"]
+    
+    @property
+    def t(self):
+        return self.gauss_params["t"]
 
     @property
     def scales(self):
         return self.gauss_params["scales"]
 
     @property
+    def scales_t(self):
+        return self.gauss_params["scales_t"]
+
+    @property
+    def scales4d(self):
+        return torch.cat((self.scales, self.scales_t), dim=-1)
+
+    @property
     def quats(self):
         return self.gauss_params["quats"]
+    
+    @property
+    def quats2(self):
+        return self.gauss_params["quats2"]
 
     @property
     def features_dc(self):
@@ -414,7 +436,7 @@ class SplatfactoModel(Model):
         # specify more if they want to add more optimizable params to gaussians.
         return {
             name: [self.gauss_params[name]]
-            for name in ["means", "scales", "quats", "features_dc", "features_rest", "opacities"]
+            for name in ["means", "t", "scales", "scales_t", "quats", "quats2", "features_dc", "features_rest", "opacities"]
         }
 
     def get_param_groups(self) -> Dict[str, List[Parameter]]:
